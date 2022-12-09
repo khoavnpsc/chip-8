@@ -16,7 +16,7 @@ uint8_t delay_timer = 0; // The delay timer.
 uint8_t sound_timer = 0; // The sound timer.
 uint32_t display[64 * 32] = {}; // The display.
 uint16_t pc = 0x200; // The interpreter's program counter. The default value is 0x200 since the program is stored in memory starting at address 0x200.
-uint8_t stack[16] = {}; // The interpreter's stack.
+uint16_t stack[16] = {}; // The interpreter's stack.
 uint8_t sp = 0; // The interpreter's stack pointer.
 uint8_t keypad[16] = {}; // The interpreter's keypad.
 uint8_t fontset[80] = { // The font from 0 to F to be displayed on the screen.
@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
 		exit(0);
 	}
 
-	// Load the font. For some reason, it�s become popular to put it at 0x50�0x9F.
+	// Load the font. For some reason, it's become popular to put it between 0x50 and 0x9F.
 	for (int i = 0; i < 0x50; i++) {
 		memory[0x50 + i] = fontset[i];
 	}
@@ -99,13 +99,16 @@ int main(int argc, char** argv) {
 			exit(0);
 		}
 		opcode = memory[pc] << 8 | memory[pc + 1]; // Fetch the opcode.
-		// printf("Ins: %x\n", opcode);
+		//printf("Ins: %x\n", opcode);
 		pc += 2; // Increase the program counter by one instruction.
 		uint8_t n = opcode & 0x000F;
 		uint16_t nnn = opcode & 0x0FFF;
 		uint8_t kk = opcode & 0x00FF;
 		uint8_t x = (opcode & 0x0F00) >> 8;
 		uint8_t y = (opcode & 0x00F0) >> 4;
+		uint8_t x_coor;
+		uint8_t y_coor;
+		uint16_t temp;
 
 		// Decode stage
 		switch (opcode & 0xF000) {
@@ -115,13 +118,35 @@ int main(int argc, char** argv) {
 				memset(display, 0, 64 * 32);
 				break;
 			case 0x00EE: // RET
-				puts("Haven't implemented yet!");
+				--sp;
+				pc = stack[sp];
 				break;
 			}
 			break;
 
 		case 0x1000: // 1nnn - JP addr
 			pc = nnn;
+			break;
+
+		case 0x2000: // 2nnn - CALL addr
+			stack[sp] = pc;
+			++sp;
+			pc = nnn;
+			break;
+
+		case 0x3000: // 3xkk - SE Vx, byte
+			if (v[x] == kk)
+				pc += 2;
+			break;
+
+		case 0x4000: // 4xkk - SNE Vx, byte
+			if (v[x] != kk)
+				pc += 2;
+			break;
+
+		case 0x5000: // 5xy0 - SE Vx, Vy
+			if (v[x] == v[y])
+				pc += 2;
 			break;
 
 		case 0x6000: // 6xkk - LD Vx, byte
@@ -149,7 +174,37 @@ int main(int argc, char** argv) {
 			case 3: // 8xy3 - XOR Vx, Vy
 				v[x] ^= v[y];
 				break;
+
+			case 4: // 8xy4 - ADD Vx, Vy
+				v[x] += v[y];
+				temp = v[x] + v[y];
+				v[0xf] = (temp == v[x] ? 0 : 1);
+				break;
+				
+			case 5: // 8xy5 - SUB Vx, Vy
+				v[x] -= v[y];
+				v[0xf] = (v[x] > v[y] ? 1 : 0);
+				break;
+
+			case 6: // 8xy6 - SHR Vx
+				v[0xf] = v[x] & 1;
+				v[x] >>= 1;
+				break;
+
+			case 7: // 8xy7 - SUBN Vx, Vy
+				v[x] = v[y] - v[x];
+				v[0xf] = (v[y] > v[x] ? 1 : 0);
+				break;
+
+			case 0xE: // 8xyE - SHL Vx {, Vy}
+				v[0xf] = (v[x] & 0x80) >> 7;
+				v[x] <<= 1;
+				break;
 			}
+			break;
+		case 0x9000: // 9xy0 - SNE Vx, Vy
+			if (v[x] != v[y])
+				pc += 2;
 			break;
 
 		case 0xA000: // Annn - LD I, addr
@@ -158,8 +213,8 @@ int main(int argc, char** argv) {
 
 		case 0xD000: // Dxyn - DRW Vx, Vy, nibble
 			// Wrap if out of bound.
-			uint8_t x_coor = v[x] % 64;
-			uint8_t y_coor = v[y] % 32;
+			x_coor = v[x] % 64;
+			y_coor = v[y] % 32;
 
 			// Set VF to 0.
 			v[0xf] = 0;
@@ -183,6 +238,70 @@ int main(int argc, char** argv) {
 						*display_bit ^= 0xffffffff;
 					}
 				}
+			}
+			break;
+
+		// Key instructions from here
+		case 0xE000:
+			switch (opcode & 0x00FF) {
+			case 0x009E: // Ex9E - SKP Vx
+				if (keypad[v[x]])
+					pc += 2;
+				break;
+
+			case 0x00A1: // ExA1 - SKNP Vx
+				if (!keypad[v[x]])
+					pc += 2;
+				break;
+			}
+			break;
+
+		case 0xF000:
+			switch (opcode & 0x00FF) {
+			case 0x0007: // Fx07 - LD Vx, DT
+				v[x] = delay_timer;
+				break;
+
+			case 0x000A: // Fx0A - LD Vx, K
+				// TODO
+				break;
+
+			case 0x0015: // Fx15 - LD DT, Vx
+				delay_timer = v[x];
+				break;
+
+			case 0x0018: // Fx18 - LD ST, Vx
+				sound_timer = v[x];
+				break;
+
+			case 0x001E: // Fx1E - ADD I, Vx
+				index += v[x];
+				break;
+
+			case 0x0029: // Fx29 - LD F, Vx
+				index = 0x50 + (5 * v[x]);
+				break;
+
+			case 0x0033: // Fx33 - LD B, Vx
+				temp = v[x];
+				memory[index + 2] = temp % 10;
+				temp /= 10;
+				memory[index + 1] = temp % 10;
+				temp /= 10;
+				memory[index] = temp % 10;
+				break;
+
+			case 0x0055: // Fx55 - LD [I], Vx
+				for (uint8_t i = 0; i <= x; ++i) {
+					memory[index + i] = v[i];
+				}
+				break;
+
+			case 0x0065: // Fx65 - LD Vx, [I]
+				for (uint8_t i = 0; i <= x; ++i) {
+					v[i] = memory[index + i];
+				}
+				break;
 			}
 			break;
 		}
