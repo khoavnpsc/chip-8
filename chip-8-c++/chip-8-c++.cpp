@@ -1,5 +1,6 @@
 ﻿#include <stdio.h>
 #include <stdint.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <SDL.h>
@@ -14,6 +15,7 @@ uint8_t v[16] = {}; // The interpreter's v registers.
 uint16_t index = 0; // The interpreter's index register.
 uint8_t delay_timer = 0; // The delay timer.
 uint8_t sound_timer = 0; // The sound timer.
+time_t t; // For the random number generator.
 uint32_t display[64 * 32] = {}; // The display.
 uint16_t pc = 0x200; // The interpreter's program counter. The default value is 0x200 since the program is stored in memory starting at address 0x200.
 uint16_t stack[16] = {}; // The interpreter's stack.
@@ -38,26 +40,80 @@ uint8_t fontset[80] = { // The font from 0 to F to be displayed on the screen.
 	0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
 
-void Platform_Init(char* title) {
+void PlatformInit(char* title) {
 	SDL_Init(SDL_INIT_VIDEO);
 	window = SDL_CreateWindow(title, 100, 50, 640 * 2, 320 * 2, SDL_WINDOW_SHOWN);
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
 }
 
-void Platform_Update() {
+void PlatformUpdate() {
 	SDL_UpdateTexture(texture, 0, display, sizeof(display[0]) * 64);
 	SDL_RenderClear(renderer);
 	SDL_RenderCopy(renderer, texture, 0, 0);
 	SDL_RenderPresent(renderer);
 }
 
-void Platform_Destroy() {
+void PlatformDestroy() {
 	SDL_DestroyTexture(texture);
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 }
+
+void ProcessInput() {
+	SDL_Event event;
+	while (SDL_PollEvent(&event))
+	{
+		switch (event.type) {
+		case SDL_QUIT:
+			exit(0);
+			break;
+		case SDL_KEYDOWN:
+			switch (event.key.keysym.sym) {
+			case SDLK_ESCAPE: exit(0); break;
+			case SDLK_x: keypad[0] = 1; break;
+			case SDLK_1: keypad[1] = 1; break;
+			case SDLK_2: keypad[2] = 1; break;
+			case SDLK_3: keypad[3] = 1; break;
+			case SDLK_q: keypad[4] = 1; break;
+			case SDLK_w: keypad[5] = 1; break;
+			case SDLK_e: keypad[6] = 1; break;
+			case SDLK_a: keypad[7] = 1; break;
+			case SDLK_s: keypad[8] = 1; break;
+			case SDLK_d: keypad[9] = 1; break;
+			case SDLK_z: keypad[0xA] = 1; break;
+			case SDLK_c: keypad[0xB] = 1; break;
+			case SDLK_4: keypad[0xC] = 1; break;
+			case SDLK_r: keypad[0xD] = 1; break;
+			case SDLK_f: keypad[0xE] = 1; break;
+			case SDLK_v: keypad[0xF] = 1; break;
+			}
+			break;
+		case SDL_KEYUP:
+			switch (event.key.keysym.sym) {
+			case SDLK_x: keypad[0] = 0; break;
+			case SDLK_1: keypad[1] = 0; break;
+			case SDLK_2: keypad[2] = 0; break;
+			case SDLK_3: keypad[3] = 0; break;
+			case SDLK_q: keypad[4] = 0; break;
+			case SDLK_w: keypad[5] = 0; break;
+			case SDLK_e: keypad[6] = 0; break;
+			case SDLK_a: keypad[7] = 0; break;
+			case SDLK_s: keypad[8] = 0; break;
+			case SDLK_d: keypad[9] = 0; break;
+			case SDLK_z: keypad[0xA] = 0; break;
+			case SDLK_c: keypad[0xB] = 0; break;
+			case SDLK_4: keypad[0xC] = 0; break;
+			case SDLK_r: keypad[0xD] = 0; break;
+			case SDLK_f: keypad[0xE] = 0; break;
+			case SDLK_v: keypad[0xF] = 0; break;
+			}
+			break;
+		}
+	}
+}
+
 
 int main(int argc, char** argv) {
 	// Read the argument.
@@ -67,7 +123,7 @@ int main(int argc, char** argv) {
 	}
 
 	// Platform initialization.
-	Platform_Init(argv[1]);
+	PlatformInit(argv[1]);
 
 	// Load the rom to the memory.
 	FILE* rom_ptr;
@@ -92,14 +148,23 @@ int main(int argc, char** argv) {
 
 	// At this point, everything we need are already in the memory.
 	uint16_t opcode;
+
+	srand((unsigned)time_t(&t));
+
 	while (true) {
+
+		ProcessInput();
+
 		// Fetching stage.
 		if (pc & 1) {
 			puts("Invalid address");
 			exit(0);
 		}
+		// Get time before running instructions 
+		const uint64_t start_frame_time = SDL_GetPerformanceCounter();
+
 		opcode = memory[pc] << 8 | memory[pc + 1]; // Fetch the opcode.
-		//printf("Ins: %x\n", opcode);
+		printf("%x\n", opcode);
 		pc += 2; // Increase the program counter by one instruction.
 		uint8_t n = opcode & 0x000F;
 		uint16_t nnn = opcode & 0x0FFF;
@@ -114,10 +179,10 @@ int main(int argc, char** argv) {
 		switch (opcode & 0xF000) {
 		case 0x0000:
 			switch (opcode) {
-			case 0x00E0: // CLS
-				memset(display, 0, 64 * 32);
+			case 0x00E0: // 00E0 - CLS
+				memset(display, 0, 8192);
 				break;
-			case 0x00EE: // RET
+			case 0x00EE: // 00EE - RET
 				--sp;
 				pc = stack[sp];
 				break;
@@ -176,8 +241,8 @@ int main(int argc, char** argv) {
 				break;
 
 			case 4: // 8xy4 - ADD Vx, Vy
-				v[x] += v[y];
 				temp = v[x] + v[y];
+				v[x] += v[y];
 				v[0xf] = (temp == v[x] ? 0 : 1);
 				break;
 				
@@ -187,8 +252,9 @@ int main(int argc, char** argv) {
 				break;
 
 			case 6: // 8xy6 - SHR Vx
-				v[0xf] = v[x] & 1;
-				v[x] >>= 1;
+				temp = v[x] & 1;
+				v[x] = v[x] >> 1;
+				v[0xf] = temp;
 				break;
 
 			case 7: // 8xy7 - SUBN Vx, Vy
@@ -197,8 +263,9 @@ int main(int argc, char** argv) {
 				break;
 
 			case 0xE: // 8xyE - SHL Vx {, Vy}
-				v[0xf] = (v[x] & 0x80) >> 7;
+				temp = (v[x] & 0x80) >> 7;
 				v[x] <<= 1;
+				v[0xf] = temp;
 				break;
 			}
 			break;
@@ -209,6 +276,14 @@ int main(int argc, char** argv) {
 
 		case 0xA000: // Annn - LD I, addr
 			index = nnn;
+			break;
+
+		case 0xB000: // Bnnn - JP V0, addr
+			pc = v[0] + nnn;
+			break;
+			
+		case 0xC000: // Cxkk - RND Vx, byte
+			v[x] = (rand() & 0xff) & kk;
 			break;
 
 		case 0xD000: // Dxyn - DRW Vx, Vy, nibble
@@ -263,7 +338,23 @@ int main(int argc, char** argv) {
 				break;
 
 			case 0x000A: // Fx0A - LD Vx, K
-				// TODO
+				if (keypad[0]) v[x] = 0;
+				else if (keypad[1]) v[x] = 1;
+				else if (keypad[2]) v[x] = 2;
+				else if (keypad[3]) v[x] = 3;
+				else if (keypad[4]) v[x] = 4;
+				else if (keypad[5]) v[x] = 5;
+				else if (keypad[6]) v[x] = 6;
+				else if (keypad[7]) v[x] = 7;
+				else if (keypad[8]) v[x] = 8;
+				else if (keypad[9]) v[x] = 9;
+				else if (keypad[0xA]) v[x] = 0xa;
+				else if (keypad[0xB]) v[x] = 0xb;
+				else if (keypad[0xC]) v[x] = 0xc;
+				else if (keypad[0xD]) v[x] = 0xd;
+				else if (keypad[0xE]) v[x] = 0xe;
+				else if (keypad[0xF]) v[x] = 0xf;
+				else pc -= 2;
 				break;
 
 			case 0x0015: // Fx15 - LD DT, Vx
@@ -305,9 +396,17 @@ int main(int argc, char** argv) {
 			}
 			break;
 		}
+		
+		if (delay_timer > 0) --delay_timer;
+		if (sound_timer > 0) --sound_timer;
+
+		const uint64_t end_frame_time = SDL_GetPerformanceCounter();
+		const double time_elapsed = (double)((end_frame_time - start_frame_time) * 1000) / SDL_GetPerformanceFrequency();
+		SDL_Delay(2.5 > time_elapsed ? 2.5 - time_elapsed : 0);
+		
 		// Update the platform.
-		Platform_Update();
+		PlatformUpdate();
 	}
 	// Destroy the platform.
-	Platform_Destroy();
+	PlatformDestroy();
 }
