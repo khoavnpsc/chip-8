@@ -1,8 +1,8 @@
 ﻿#include <stdio.h>
 #include <stdint.h>
-#include <time.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <SDL.h>
 #include <Windows.h>
 
@@ -15,6 +15,7 @@ uint8_t v[16] = {}; // The interpreter's v registers.
 uint16_t index = 0; // The interpreter's index register.
 uint8_t delay_timer = 0; // The delay timer.
 uint8_t sound_timer = 0; // The sound timer.
+double cycle_delay;
 time_t t; // For the random number generator.
 uint32_t display[64 * 32] = {}; // The display.
 uint16_t pc = 0x200; // The interpreter's program counter. The default value is 0x200 since the program is stored in memory starting at address 0x200.
@@ -124,6 +125,7 @@ int main(int argc, char** argv) {
 
 	// Platform initialization.
 	PlatformInit(argv[1]);
+	cycle_delay = 3;
 
 	// Load the rom to the memory.
 	FILE* rom_ptr;
@@ -164,7 +166,6 @@ int main(int argc, char** argv) {
 		const uint64_t start_frame_time = SDL_GetPerformanceCounter();
 
 		opcode = memory[pc] << 8 | memory[pc + 1]; // Fetch the opcode.
-		printf("%x\n", opcode);
 		pc += 2; // Increase the program counter by one instruction.
 		uint8_t n = opcode & 0x000F;
 		uint16_t nnn = opcode & 0x0FFF;
@@ -402,7 +403,7 @@ int main(int argc, char** argv) {
 
 		const uint64_t end_frame_time = SDL_GetPerformanceCounter();
 		const double time_elapsed = (double)((end_frame_time - start_frame_time) * 1000) / SDL_GetPerformanceFrequency();
-		SDL_Delay(2.5 > time_elapsed ? 2.5 - time_elapsed : 0);
+		SDL_Delay(cycle_delay > time_elapsed ? cycle_delay - time_elapsed : 0);
 		
 		// Update the platform.
 		PlatformUpdate();
