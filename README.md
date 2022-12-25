@@ -1,3 +1,22 @@
-# chip-8
+# Chip 8 Emulator
 
-A chip-8 emulator written in CPP (haven't completed)
+Made by khoavnpsc using C++
+
+## How to use
+
+```powershell
+Usage: chip-8-c++.exe rom_name
+```
+
+## Features
+
+- [x]  Read opcode
+- [x]  Execute instructions
+- [x]  Rendering
+- [x]  Processing Input
+- [ ]  Sound
+- [ ]  Load rom dynamically
+- [ ]  Add some awesome UI
+- [ ]  Differences quirks support
+
+The implemented features are tested using [https://github.com/Timendus/chip8-test-suite#quirks-test](https://github.com/Timendus/chip8-test-suite#quirks-test).

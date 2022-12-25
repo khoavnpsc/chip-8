@@ -115,7 +115,6 @@ void ProcessInput() {
 	}
 }
 
-
 int main(int argc, char** argv) {
 	// Read the argument.
 	if (argc != 2) {
@@ -143,12 +142,11 @@ int main(int argc, char** argv) {
 		exit(0);
 	}
 
-	// Load the font. For some reason, it's become popular to put it between 0x50 and 0x9F.
+	// Load the font.
 	for (int i = 0; i < 0x50; i++) {
 		memory[0x50 + i] = fontset[i];
 	}
 
-	// At this point, everything we need are already in the memory.
 	uint16_t opcode;
 
 	srand((unsigned)time_t(&t));
