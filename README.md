@@ -1,4 +1,4 @@
-# Chip 8 Emulator
+# Chip-8 Emulator
 
 Made by khoavnpsc using C++
 
